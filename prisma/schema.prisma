@@ -1,0 +1,52 @@
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  courses   Course[]
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id                String       @id @default(uuid())
+  name              String
+  email          String       @unique
+  password          String
+  purchasedCourses  UserCourse[]
+  createdAt         DateTime     @default(now())
+}
+
+model Course {
+  id          String       @id @default(uuid())
+  title       String
+  description String
+  imageLink   String
+  price       Float
+  adminId     String
+  purchasedBy UserCourse[]
+  createdAt   DateTime     @default(now())
+  
+  admin       Admin        @relation(fields: [adminId], references: [id])
+}
+
+model UserCourse {
+  id         String   @id @default(uuid())
+  userId     String
+  courseId   String
+  purchasedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  course Course @relation(fields: [courseId], references: [id])
+
+  @@unique([userId, courseId])
+}

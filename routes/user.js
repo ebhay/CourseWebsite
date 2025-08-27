@@ -1,65 +1,57 @@
-const { Router } = require("express");
-const router = Router();
+import express from 'express'
+import bcrypt from 'bcrypt'
+import { prisma } from '../index.js'
+import { verifyPassword, generateToken } from '../middleware/auth.js'
 
-const { User, Course } = require("../db");
+const router = express.Router()
 
-const userMiddleware = require("../middleware/user");
-
-// User Routes
-router.post('/signup',async (req, res) => {
-    // Implement user signup logic
-    const username=req.body.username;
-    const password=req.body.password;
-
-    await User.create({
-        username:username,
-        password:password
-    })
-    
-    res.json({
-        message: "User created successfully",
-    })
-
-});
-
-router.get('/courses', async (req, res) => {
-    // Implement listing all courses logic
-    const response= await Course.find({
-        // Filter Lagao Course Having PRice Only 299 price:299
-        //Showing Only Public Course isPublished:true
-     });
-     res.json(response);
-});
-
-router.post('/courses/:courseId', userMiddleware,async (req, res) => {
-     // Implement course purchase logic
-     const courseId = req.params.courseId;
-     const username = req.headers.username;
-    // Update the course status to purchased
-    await User.updateOne({
-        username: username
-    },{
-        "$push": {
-            purchasedCourses: courseId,
-
-
+router.post('/register', async (req, res) => {
+    const { name, email, password } = req.body;
+    try {
+        const Usercheck = await prisma.User.findUnique({
+            where: { email }
+        })
+        if (Usercheck) {
+            return res.status(400).json({ message: "User already exists" })
         }
-    })
-    res.json({
-        message: "Course purchased successfully",
-    });
+        const hashedPassword = await bcrypt.hash(password, 10)
+        const User = await prisma.User.create({
+            data: { name, email, password: hashedPassword }
+        })
+        res.status(201).json({ message: "User created successfully", User })
+     } catch (error) {
+        console.error('User registration error:', error)
+        res.status(500).json({ message: "Internal server error" })
+    }
+})
 
-});
+router.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        const User = await prisma.User.findUnique({
+            where: { email }
+        })
+        if (!User) {
+            return res.status(401).json({ message: "Invalid credentials" })
+        }
+        
+        const isPasswordValid = await verifyPassword(password, User.password)
+        if (!isPasswordValid) {
+            return res.status(401).json({ message: "Invalid credentials" })
+        }
+        
+        const token = generateToken({ userId: User.id, email: User.email })
+        
+        res.status(200).json({ 
+            message: "Login successful", 
+            token,
+            user: { id: User.id, name: User.name, email: User.email }
+        })
+    }
+    catch (error) {
+        console.error('User login error:', error)
+        res.status(500).json({ message: "Internal server error" })
+    }
+})
 
-router.get('/purchasedCourses', userMiddleware,async (req, res) => {
-    // Implement fetching purchased courses logic
-    const user=await User.findOne({
-        username: req.headers.username
-    });
-    const purchasedCourses=user.purchasedCourses;
-    const courses = await Course.find({ _id: { $in: purchasedCourses } });
-        res.json({ purchasedCourses, courses });
-    res.json(purchasedCourses,courses);
-});
-
-module.exports = router
+export default router;
